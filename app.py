@@ -8,8 +8,7 @@ from datetime import datetime
 # Настройка страницы
 st.set_page_config(
     layout="wide",
-    page_title="📊 Sales Analytics Dashboard",
-    page_icon="📊"
+    page_title="Sales Analytics Dashboard"
 )
 
 # Загрузка данных
@@ -17,7 +16,6 @@ st.set_page_config(
 def load_data():
     conn = sqlite3.connect('data/sales.db')
     
-    # Чтение таблиц с учетом вашей структуры
     sales = pd.read_sql("SELECT * FROM sales", conn)
     goods = pd.read_sql("SELECT * FROM goods", conn)
     categs = pd.read_sql("SELECT * FROM categs", conn)
@@ -37,7 +35,7 @@ def load_data():
 
 # Основное приложение
 def main():
-    st.title("📊 Анализ продаж аптек")
+    st.title("Анализ продаж аптек")
     df = load_data()
     
     # Сайдбар с фильтрами
@@ -56,7 +54,7 @@ def main():
         selected_stores = st.multiselect(
             "Выберите аптеки",
             df['StockDesc'].unique(),
-            default=df['StockDesc'].unique()[0]
+            default=df['StockDesc'].unique()[::]
         )
     
     # Фильтрация данных
@@ -66,58 +64,43 @@ def main():
         (df['StockDesc'].isin(selected_stores))
     ]
     
-    # Визуализации
-    tab1, tab2, tab3 = st.tabs(["📈 Динамика", "🍕 Доли", "🏆 Топы"])
     
-    with tab1:
-        st.header("Динамика продаж")
-        top_cats = filtered_df.groupby('ProductCatDesc')['SalesSum'].sum().nlargest(3).index
-        monthly_data = filtered_df[filtered_df['ProductCatDesc'].isin(top_cats)].groupby(
-            [pd.Grouper(key='DocDate', freq='M'), 'ProductCatDesc']
-        )['SalesSum'].sum().reset_index()
-        
-        fig, ax = plt.subplots(figsize=(12, 6))
-        sns.lineplot(
-            data=monthly_data,
-            x='DocDate',
-            y='SalesSum',
-            hue='ProductCatDesc',
-            marker='o'
+    st.header("Динамика продаж")
+    top_cats = filtered_df.groupby('ProductCatDesc')['SalesSum'].sum().nlargest(3).index
+    monthly_data = filtered_df[filtered_df['ProductCatDesc'].isin(top_cats)].groupby(
+        [pd.Grouper(key='DocDate', freq='M'), 'ProductCatDesc']
+    )['SalesSum'].sum().reset_index()
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.lineplot(
+        data=monthly_data,
+        x='DocDate',
+        y='SalesSum',
+        hue='ProductCatDesc',
+        marker='o'
+    )
+    plt.title("Топ-3 категорий по месяцам")
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
+
+
+    st.header("Распределение по категориям")
+    cats_incomes_per_months = (
+        df
+        .groupby(['ProductCatDesc'], as_index=False) 
+        .agg(Income=('SalesSum', 'sum'))
+        .sort_values('Income')
+        .rename(
+            columns={
+            'ProductCatDesc':"Название категории",
+            'Income':'Выручка'}
         )
-        plt.title("Топ-3 категорий по месяцам")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
+    )    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    sns.barplot(cats_incomes_per_months, y='Название категории', x='Выручка');
+
+    st.pyplot(fig)
     
-    with tab2:
-        st.header("Распределение по категориям")
-        cat_sales = filtered_df.groupby('ProductCatDesc')['SalesSum'].sum()
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        ax.pie(
-            cat_sales,
-            labels=cat_sales.index,
-            autopct='%1.1f%%',
-            startangle=90
-        )
-        st.pyplot(fig)
-    
-    with tab3:
-        st.header("Топ-5 товаров")
-        top_products = filtered_df.groupby('GoodDesc')['SalesSum'].sum().nlargest(5)
-        
-        fig, ax = plt.subplots(figsize=(12, 6))
-        sns.barplot(
-            x=top_products.values,
-            y=top_products.index,
-            palette="viridis"
-        )
-        plt.title("Лучшие товары по выручке")
-        st.pyplot(fig)
-    
-    # Статистика
-    st.sidebar.markdown("---")
-    st.sidebar.metric("Общая выручка", f"{filtered_df['SalesSum'].sum():,.2f} руб.")
-    st.sidebar.metric("Кол-во продаж", filtered_df['Quant'].sum())
 
 if __name__ == "__main__":
     main()
